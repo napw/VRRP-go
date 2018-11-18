@@ -7,3 +7,9 @@ const (
 	VRRPv2 VRRPVersion = 2
 	VRRPv3 VRRPVersion = 3
 )
+
+const (
+	INIT = iota
+	MASTER
+	BACKUP
+)
