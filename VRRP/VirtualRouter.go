@@ -8,16 +8,8 @@ import (
 type VRRPStateMachine struct {
 	IPvXVersion      int
 	IPAddr           net.IP
-	state            int
+	State            int
 	RespondingRouter *VirtualRouter
-}
-
-func NewVRRPSM(v int, ip net.IP, r *VirtualRouter) *VRRPStateMachine {
-	return &VRRPStateMachine{IPvXVersion: v, IPAddr: ip, state: INIT, RespondingRouter: r}
-}
-
-func (m *VRRPStateMachine) State() int {
-	return m.state
 }
 
 type VirtualRouter struct {
@@ -29,8 +21,14 @@ type VirtualRouter struct {
 	MasterDownInterval            uint16
 	Preempt                       bool
 	AcceptMode                    bool
+	Owner                         bool
 	VirtualRouterMACAddressIPv4   net.HardwareAddr
 	VirtualRouterMACAddressIPv6   net.HardwareAddr
+	BindedIPvXAddr                map[[16]byte]VRRPStateMachine
+}
+
+func NewVirtualRouter() *VirtualRouter {
+	return &VirtualRouter{BindedIPvXAddr: make(map[[16]byte]VRRPStateMachine)}
 }
 
 func (r *VirtualRouter) SetVRID(ID byte) *VirtualRouter {
@@ -41,6 +39,9 @@ func (r *VirtualRouter) SetVRID(ID byte) *VirtualRouter {
 }
 
 func (r *VirtualRouter) SetPriority(Priority byte) *VirtualRouter {
+	if r.Owner == true {
+		Priority = 255
+	}
 	r.Priority = Priority
 	return r
 }
@@ -66,4 +67,19 @@ func (r *VirtualRouter) SetPreemptMode(flag bool) *VirtualRouter {
 func (r *VirtualRouter) SetAcceptMode(flag bool) *VirtualRouter {
 	r.AcceptMode = flag
 	return r
+}
+
+func (r *VirtualRouter) SetOwner(flag bool) *VirtualRouter {
+	r.Owner = flag
+	return r
+}
+
+func (r *VirtualRouter) AddIPvXAddr(version byte, ip net.IP) {
+	var key [16]byte
+	copy(key[:], ip)
+	if _, ok := r.BindedIPvXAddr[key]; ok {
+		//todo log this
+	} else {
+
+	}
 }
