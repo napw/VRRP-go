@@ -186,6 +186,33 @@ func (packet *VRRPPacket) SetCheckSum(pshdr *PseudoHeader) {
 	packet.Header[6] = byte(sum)
 }
 
+func (packet *VRRPPacket) ValidateCheckSum(pshdr *PseudoHeader) bool {
+	var PointerAdd = func(ptr unsafe.Pointer, bytes int) unsafe.Pointer {
+		return unsafe.Pointer(uintptr(ptr) + uintptr(bytes))
+	}
+	var octets = pshdr.ToBytes()
+	octets = append(octets, packet.ToBytes()...)
+	var x = len(octets)
+	var ptr = unsafe.Pointer(&octets[0])
+	var sum uint32
+	for x > 1 {
+		sum = sum + uint32(*(*uint16)(ptr))
+		ptr = PointerAdd(ptr, 2)
+		x = x - 2
+	}
+	if x > 0 {
+		sum = sum + uint32(*((*uint8)(ptr)))
+	}
+	for (sum >> 16) > 0 {
+		sum = sum&65535 + sum>>16
+	}
+	if uint16(sum) == 65535 {
+		return true
+	} else {
+		return false
+	}
+}
+
 func (packet *VRRPPacket) ToBytes() []byte {
 	var payload = make([]byte, 8+len(packet.IPAddress)*4)
 	copy(payload, packet.Header[:])
