@@ -1,6 +1,7 @@
 package network
 
 import (
+	"VRRP/VRRP"
 	"fmt"
 	"golang.org/x/net/ipv4"
 	"net"
@@ -45,21 +46,26 @@ func (iface *IPv4Interface) WriteMessage(payload []byte) error {
 	return nil
 }
 
-func (iface *IPv4Interface) ReadMessage() ([]byte, error) {
+func (iface *IPv4Interface) ReadMessage() ([]byte, *VRRP.PseudoHeader, error) {
 	for index := range iface.buffer {
 		iface.buffer[index] = 0
 	}
 	if header, payload, _, err := iface.rawConn.ReadFrom(iface.buffer); err != nil {
-		return nil, err
+		return nil, nil, err
 	} else {
 		//pre check
 		if header.Protocol != VRRPIPProtocolNumber {
-			return nil, fmt.Errorf("VRRP IPv4 datagram protocol number %d", header.Protocol)
+			return nil, nil, fmt.Errorf("VRRP IPv4 datagram protocol number %d", header.Protocol)
 		}
 		if header.TTL != VRRPMultiTTL {
-			return nil, fmt.Errorf("VRRP IPv4 datagram TTL %d", header.TTL)
+			return nil, nil, fmt.Errorf("VRRP IPv4 datagram TTL %d", header.TTL)
 		}
-		return payload, nil
+		var psh VRRP.PseudoHeader
+		psh.Daddr = header.Dst
+		psh.Saddr = header.Src
+		psh.Protocol = VRRPIPProtocolNumber
+		psh.Len = uint16(header.Len)
+		return payload, &psh, nil
 	}
 }
 

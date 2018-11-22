@@ -6,7 +6,7 @@ import (
 )
 
 type VRRPStateMachine struct {
-	IPvXVersion      int
+	IPvXVersion      byte
 	IPAddr           net.IP
 	State            int
 	RespondingRouter *VirtualRouter
@@ -24,11 +24,11 @@ type VirtualRouter struct {
 	Owner                         bool
 	VirtualRouterMACAddressIPv4   net.HardwareAddr
 	VirtualRouterMACAddressIPv6   net.HardwareAddr
-	BindedIPvXAddr                map[[16]byte]VRRPStateMachine
+	BindedIPvXAddr                map[[16]byte]*VRRPStateMachine
 }
 
 func NewVirtualRouter() *VirtualRouter {
-	return &VirtualRouter{BindedIPvXAddr: make(map[[16]byte]VRRPStateMachine)}
+	return &VirtualRouter{BindedIPvXAddr: make(map[[16]byte]*VRRPStateMachine)}
 }
 
 func (r *VirtualRouter) SetVRID(ID byte) *VirtualRouter {
@@ -80,6 +80,22 @@ func (r *VirtualRouter) AddIPvXAddr(version byte, ip net.IP) {
 	if _, ok := r.BindedIPvXAddr[key]; ok {
 		//todo log this
 	} else {
+		var smachine = &VRRPStateMachine{
+			IPvXVersion: version,
+			IPAddr:      ip,
+			State:       INIT,
+		}
+		r.BindedIPvXAddr[key] = smachine
+	}
+}
 
+func (r *VirtualRouter) RemoveIPvXAddr(ip net.IP) error {
+	var key [16]byte
+	copy(key[:], ip)
+	if _, ok := r.BindedIPvXAddr[key]; ok {
+		delete(r.BindedIPvXAddr, key)
+		return nil
+	} else {
+		return fmt.Errorf("error occurred when remove %v, unexist", ip)
 	}
 }

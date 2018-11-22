@@ -23,7 +23,7 @@ func main() {
 			p.SetIPvXAddr(4, net.IPv4(192, 34, 54, 56))
 			p.SetIPvXAddr(4, net.IPv4(192, 34, 54, 58))
 			p.SetIPvXAddr(4, net.IPv4(156, 34, 54, 58))
-			var pp = &VRRP.PseudoHeader{Saddr: net.IPv4(192, 168, 83, 132), Daddr: net.IPv4(224, 0, 0, 18), Protocol: 112, Len: uint16(len(p.ToBytes()))}
+			var pp = &VRRP.PseudoHeader{Saddr: net.IPv4(192, 168, 83, 135), Daddr: net.IPv4(224, 0, 0, 18), Protocol: 112, Len: uint16(len(p.ToBytes()))}
 			p.SetCheckSum(pp)
 			if err := t.WriteMessage(p.ToBytes()); err != nil {
 				fmt.Printf("error occurred when send, %v\n", err)

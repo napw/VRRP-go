@@ -38,3 +38,10 @@ func NewLogger(o *io.Writer) *Logger {
 		return &Logger{level: INFO, output: log.New(*o, "", log.LstdFlags)}
 	}
 }
+
+var GLoger *Logger
+
+func init() {
+	GLoger = NewLogger(nil)
+	GLoger.SetLevel(DEBUG)
+}

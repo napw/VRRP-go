@@ -9,6 +9,11 @@ const (
 )
 
 const (
+	IPv4 = 4
+	IPv6 = 6
+)
+
+const (
 	INIT = iota
 	MASTER
 	BACKUP
