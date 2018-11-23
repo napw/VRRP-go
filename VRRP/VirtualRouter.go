@@ -25,17 +25,17 @@ type VirtualRouter struct {
 	VirtualRouterMACAddressIPv4   net.HardwareAddr
 	VirtualRouterMACAddressIPv6   net.HardwareAddr
 	BindedIPvXAddr                map[[16]byte]*VRRPStateMachine
+	NetInterface                  net.Interface
 }
 
-func NewVirtualRouter() *VirtualRouter {
-	return &VirtualRouter{BindedIPvXAddr: make(map[[16]byte]*VRRPStateMachine)}
-}
-
-func (r *VirtualRouter) SetVRID(ID byte) *VirtualRouter {
-	r.VRID = ID
-	r.VirtualRouterMACAddressIPv4, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-01-%X", ID))
-	r.VirtualRouterMACAddressIPv6, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-02-%X", ID))
-	return r
+func NewVirtualRouter(VRID byte, nif net.Interface, Owner bool) *VirtualRouter {
+	var vr = &VirtualRouter{BindedIPvXAddr: make(map[[16]byte]*VRRPStateMachine)}
+	vr.VRID = VRID
+	vr.VirtualRouterMACAddressIPv4, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-01-%X", ID))
+	vr.VirtualRouterMACAddressIPv6, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-02-%X", ID))
+	vr.NetInterface = nif
+	vr.Owner = Owner
+	return vr
 }
 
 func (r *VirtualRouter) SetPriority(Priority byte) *VirtualRouter {
@@ -66,11 +66,6 @@ func (r *VirtualRouter) SetPreemptMode(flag bool) *VirtualRouter {
 
 func (r *VirtualRouter) SetAcceptMode(flag bool) *VirtualRouter {
 	r.AcceptMode = flag
-	return r
-}
-
-func (r *VirtualRouter) SetOwner(flag bool) *VirtualRouter {
-	r.Owner = flag
 	return r
 }
 
