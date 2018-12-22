@@ -85,7 +85,7 @@ func (packet *VRRPPacket) GetIPvXAddr(version byte) (addrs []net.IP) {
 	}
 }
 
-func (packet *VRRPPacket) SetIPvXAddr(version byte, ip net.IP) {
+func (packet *VRRPPacket) AddIPvXAddr(version byte, ip net.IP) {
 	switch version {
 	case 4:
 		packet.IPAddress = append(packet.IPAddress, [4]byte{ip[12], ip[13], ip[14], ip[15]})
@@ -97,7 +97,7 @@ func (packet *VRRPPacket) SetIPvXAddr(version byte, ip net.IP) {
 		}
 		packet.setIPvXAddrCount(packet.GetIPvXAddrCount() + 1)
 	default:
-		//todo what should I do?
+		panic("impossible error occurred when add IP addr into VRRP packet")
 	}
 }
 

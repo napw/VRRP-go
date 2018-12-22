@@ -2,14 +2,12 @@ package main
 
 import (
 	"VRRP/VRRP"
-	"VRRP/network"
-	"fmt"
+	"github.com/go-ffmt/ffmt"
 	"net"
-	"time"
 )
 
 func main() {
-	var t, err = network.NewIPv4Interface("ens33")
+	/*var t, err = network.NewIPv4Interface("ens33")
 	if err != nil {
 		fmt.Printf("err occurred when create if, %v", err)
 	} else {
@@ -31,6 +29,14 @@ func main() {
 			time.Sleep(5 * time.Second)
 		}
 
-	}
+	}*/
+	var vr = VRRP.NewVirtualRouter(200, "ens33", false, VRRP.IPv4)
+	vr.SetPriority(150)
+	vr.SetMasterAdvInterval(50)
+	vr.SetAdvInterval(50)
+	vr.SetPreemptMode(false)
+	vr.AddIPvXAddr(net.IPv4(1, 1, 1, 1))
+	vr.AddIPvXAddr(net.IPv4(172, 23, 27, 199))
+	ffmt.Puts(vr)
 
 }

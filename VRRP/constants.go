@@ -1,5 +1,7 @@
 package VRRP
 
+import "net"
+
 type VRRPVersion byte
 
 const (
@@ -18,3 +20,10 @@ const (
 	MASTER
 	BACKUP
 )
+
+const (
+	VRRPMultiTTL         = 255
+	VRRPIPProtocolNumber = 112
+)
+
+var VRRPMultiAddrIPv4 = net.IPv4(224, 0, 0, 18)
