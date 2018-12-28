@@ -4,6 +4,7 @@ import (
 	"VRRP/logger"
 	"fmt"
 	"net"
+	"time"
 )
 
 type VirtualRouter struct {
@@ -30,6 +31,8 @@ type VirtualRouter struct {
 	IPAddrAnnouncer     AddrAnnouncer
 	EventChannel        chan EVENT
 	PacketQueue         chan *VRRPPacket
+	advertisementTicker *time.Ticker
+	masterDownTimer     *time.Timer
 }
 
 func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRouter {
@@ -215,7 +218,39 @@ func (r *VirtualRouter) masterDown() {
 	logger.GLoger.Printf(logger.INFO, "virtual router %v quit MASTER state", r.VRID)
 }
 
-func (r *VirtualRouter) processIncomingAdvertPacket() {
+func (r *VirtualRouter) makeAdvertTicker() {
+	r.advertisementTicker = time.NewTicker(time.Duration(r.AdvertisementInterval*10) * time.Millisecond)
+}
+
+func (r *VirtualRouter) stopAdvertTicker() {
+	r.advertisementTicker.Stop()
+}
+
+func (r *VirtualRouter) makeMasterDownTimer() {
+	if r.masterDownTimer == nil {
+		r.masterDownTimer = time.NewTimer(time.Duration(r.MasterDownInterval*10) * time.Millisecond)
+	} else {
+		r.resetMasterDownTimer()
+	}
+}
+
+func (r *VirtualRouter) stopMasterDownTimer() {
+	if !r.masterDownTimer.Stop() {
+		<-r.masterDownTimer.C
+	}
+}
+
+func (r *VirtualRouter) resetMasterDownTimer() {
+	r.stopMasterDownTimer()
+	r.masterDownTimer.Reset(time.Duration(r.MasterDownInterval*10) * time.Millisecond)
+}
+
+func (r *VirtualRouter) resetMasterDownTimerToSkewTime() {
+	r.stopMasterDownTimer()
+	r.masterDownTimer.Reset(time.Duration(r.SkewTime*10) * time.Millisecond)
+}
+
+func (r *VirtualRouter) EventLoop() {
 	/////////////////////////////////////////
 	var LargerThan = func(ip1, ip2 net.IP) bool {
 		if len(ip1) != len(ip2) {
@@ -230,7 +265,48 @@ func (r *VirtualRouter) processIncomingAdvertPacket() {
 	}
 	/////////////////////////////////////////
 	switch r.State {
+	case INIT:
+		if r.Priority == 255 || r.Owner {
+			logger.GLoger.Printf(logger.INFO, "enter owner mode")
+			r.SendAdvertMessage()
+			r.IPAddrAnnouncer.AnnounceAll(r)
+			//set up advertisement timer
+			r.makeAdvertTicker()
+			r.State = MASTER
+		} else {
+			logger.GLoger.Printf(logger.INFO, "VR is not a owner")
+			r.SetMasterAdvInterval(r.AdvertisementInterval)
+			//set up master down timer
+			r.makeMasterDownTimer()
+			r.State = BACKUP
+		}
 	case MASTER:
+		//check if shutdown event received
+		select {
+		case event := <-r.EventChannel:
+			if event == SHUTDOWN {
+				//close advert timer
+				r.stopAdvertTicker()
+				//send advertisement with priority 0
+				var priority = r.Priority
+				r.SetPriority(0)
+				r.SendAdvertMessage()
+				r.SetPriority(priority)
+				//transition into INIT
+				r.State = INIT
+				//maybe we can break out the event loop
+			}
+		default:
+			//nothing to do, just break
+		}
+		//check if advertisement timer fired
+		select {
+		case <-r.advertisementTicker.C:
+			r.SendAdvertMessage()
+		default:
+			//nothing to do, just break
+		}
+		//process incoming advertisement
 		select {
 		case packet := <-r.PacketQueue:
 			if packet.GetPriority() == 0 {
@@ -238,8 +314,11 @@ func (r *VirtualRouter) processIncomingAdvertPacket() {
 			} else {
 				if packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && LargerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
 					//todo give up master role
-					r.VRRPAdvertTimer.Stop()
+					//cancel Advertisement timer
+					r.stopAdvertTicker()
+					//set up master down timer
 					r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+					r.makeMasterDownTimer()
 					r.State = BACKUP
 				} else {
 					//just discard this one
@@ -250,76 +329,46 @@ func (r *VirtualRouter) processIncomingAdvertPacket() {
 		}
 	case BACKUP:
 		select {
+		case event := <-r.EventChannel:
+			if event == SHUTDOWN {
+				//close master down timer
+				r.stopMasterDownTimer()
+				//transition into INIT
+				r.State = INIT
+			}
+		default:
+		}
+		//process incoming advertisement
+		select {
 		case packet := <-r.PacketQueue:
 			if packet.GetPriority() == 0 {
 				logger.GLoger.Printf(logger.INFO, "VRID:%v received one advertisement with priority 0, transition into MASTER state", r.VRID)
-				//todo Set the Master_Down_Timer to Skew_Time
+				//Set the Master_Down_Timer to Skew_Time
+				r.resetMasterDownTimerToSkewTime()
 			} else {
 				if r.Preempt == false || packet.GetPriority() > r.Priority {
-					//todo reset master down timer
+					//reset master down timer
+					r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+					r.resetMasterDownTimer()
 				} else {
 					//nothing to do, just discard this one
 				}
 			}
-
 		default:
 			//nothing to do
 		}
-	}
-}
 
-func (r *VirtualRouter) EventLoop() {
-	switch r.State {
-	case INIT:
-		if r.Priority == 255 || r.Owner {
-			logger.GLoger.Printf(logger.INFO, "enter owner mode")
+		select {
+		//Master_Down_Timer fired
+		case <-r.masterDownTimer.C:
+			// Send an ADVERTISEMENT
 			r.SendAdvertMessage()
 			r.IPAddrAnnouncer.AnnounceAll(r)
-			//todo set up advertisement timer
+			//Set the Advertisement Timer to Advertisement interval
+			r.makeAdvertTicker()
 			r.State = MASTER
-		} else {
-			logger.GLoger.Printf(logger.INFO, "VR is not a owner")
-			r.SetMasterAdvInterval(r.AdvertisementInterval)
-			//todo set up master down timer
-			r.State = BACKUP
-		}
-	case MASTER:
-		//set up for master mode
-		r.masterUP()
-		//wait for shutdown event, or process incoming advertisement
-		select {
-		case event := <-r.EventChannel:
-			if event == SHUTDOWN {
-				//close advert timer
-				r.VRRPAdvertTimer.Stop()
-				//send advertisement with priority 0
-				var priority = r.Priority
-				r.SetPriority(0)
-				r.SendAdvertMessage()
-				r.SetPriority(priority)
-				//transition into INIT
-				r.State = INIT
-			}
 		default:
-			if true {
-				r.processIncomingAdvertPacket()
-			}
-
-		}
-	case BACKUP:
-		select {
-		case event := <-r.EventChannel:
-			if event == SHUTDOWN {
-				//close master down timer
-				r.VRRPMasterDownTimer.Stop()
-				//transition into INIT
-				r.State = INIT
-			}
-		default:
-			if true {
-				r.processIncomingAdvertPacket()
-			}
-
+			//nothing to do
 		}
 
 	}

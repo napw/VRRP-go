@@ -2,7 +2,6 @@ package main
 
 import (
 	"VRRP/VRRP"
-	"github.com/go-ffmt/ffmt"
 	"net"
 )
 
@@ -37,6 +36,9 @@ func main() {
 	vr.SetPreemptMode(false)
 	vr.AddIPvXAddr(net.IPv4(1, 1, 1, 1))
 	vr.AddIPvXAddr(net.IPv4(172, 23, 27, 199))
-	ffmt.Puts(vr)
+	vr.State = VRRP.MASTER
+	for i := 0; i < 3; i++ {
+		vr.EventLoop()
+	}
 
 }
