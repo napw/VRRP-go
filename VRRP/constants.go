@@ -27,3 +27,13 @@ const (
 )
 
 var VRRPMultiAddrIPv4 = net.IPv4(224, 0, 0, 18)
+
+var BaordcastHADDR, _ = net.ParseMAC("ff:ff:ff:ff:ff:ff")
+
+type EVENT byte
+
+const (
+	SHUTDOWN = iota
+)
+
+const PACKETQUEUESIZE = 1000

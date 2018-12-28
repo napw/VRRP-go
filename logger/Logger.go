@@ -14,7 +14,7 @@ type Logger struct {
 func (l *Logger) SetLevel(level LogLevel) {
 	l.level = level
 	if level == DEBUG {
-		l.output.SetFlags(log.Ldate | log.Lmicroseconds | log.Lshortfile)
+		l.output.SetFlags(log.Ldate | log.Lmicroseconds)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 type VRRPPacket struct {
 	Header    [8]byte
 	IPAddress [][4]byte
+	Pshdr     *PseudoHeader
 }
 
 type PseudoHeader struct {
