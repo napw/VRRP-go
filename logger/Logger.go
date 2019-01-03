@@ -26,7 +26,7 @@ func (l *Logger) Printf(level LogLevel, format string, a ...interface{}) {
 	if level < l.level {
 		return
 	} else {
-		l.output.Printf(format, a)
+		l.output.Printf(format, a...)
 	}
 
 }

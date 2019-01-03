@@ -27,7 +27,7 @@ type VirtualRouter struct {
 	VRRPMasterDownTimer *MasterDownTimer
 	ProtectedIPaddrs    map[[16]byte]bool
 	State               int
-	IPlayerInterface    NetWorkInterface
+	IPlayerInterface    IPConnection
 	IPAddrAnnouncer     AddrAnnouncer
 	EventChannel        chan EVENT
 	PacketQueue         chan *VRRPPacket
@@ -56,41 +56,35 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	vr.PacketQueue = make(chan *VRRPPacket, PACKETQUEUESIZE)
 
 	vr.IPvX = IPvX
-	//set up IPv4 interface
-	if IPvX == IPv4 {
-		if IPlayer, errofopeninterface := NewIPv4Interface(nif); errofopeninterface != nil {
-			logger.GLoger.Printf(logger.FATAL, "error occurred when creating IP layer interface, %v", errofopeninterface)
-			panic(errofopeninterface)
-		} else {
-			//create IP layer interface
-			vr.IPlayerInterface = IPlayer
-			//determine source IP addr of VRRP packet
-			var NetworkInterface, _ = net.InterfaceByName(nif)
-			if addrs, errofgetaddrs := NetworkInterface.Addrs(); errofgetaddrs != nil {
-				logger.GLoger.Printf(logger.FATAL, "error occurred when get ip addresses of %v", nif)
-				panic(errofgetaddrs)
+	//determine source IP addr of VRRP packet
+	var NetworkInterface, _ = net.InterfaceByName(nif)
+	if addrs, errofgetaddrs := NetworkInterface.Addrs(); errofgetaddrs != nil {
+		logger.GLoger.Printf(logger.FATAL, "error occurred when get ip addresses of %v", nif)
+		panic(errofgetaddrs)
+	} else {
+		vr.NetInterface = NetworkInterface
+		var preferred net.IP = nil
+		for _, addr := range addrs {
+			if addr, _, errofparsecidr := net.ParseCIDR(addr.String()); errofparsecidr != nil {
+				panic(errofparsecidr)
 			} else {
-				vr.NetInterface = NetworkInterface
-				var preferred net.IP = nil
-				for _, addr := range addrs {
-					if addr, _, errofparsecidr := net.ParseCIDR(addr.String()); errofparsecidr != nil {
-						panic(errofparsecidr)
-					} else {
-						if addr.IsGlobalUnicast() {
-							if tmp := addr.To4(); tmp != nil {
-								preferred = tmp
-								break
-							}
-						}
+				if addr.IsGlobalUnicast() {
+					if tmp := addr.To4(); tmp != nil {
+						preferred = tmp
+						break
 					}
 				}
-				if preferred == nil {
-					panic("error occurred when getting preferred source IP, can not find usable IP address on " + nif)
-				}
-				vr.preferredSourceIP = preferred
-				//set up ARP client
-				vr.IPAddrAnnouncer = NewIPv4AddrAnnouncer(NetworkInterface)
 			}
+		}
+		if preferred == nil {
+			panic("error occurred when getting preferred source IP, can not find usable IP address on " + nif)
+		}
+		vr.preferredSourceIP = preferred
+		//set up ARP client
+		vr.IPAddrAnnouncer = NewIPv4AddrAnnouncer(NetworkInterface)
+		//set up IPv4 interface
+		if IPvX == IPv4 {
+			vr.IPlayerInterface = NewIPv4Conn(vr.preferredSourceIP, VRRPMultiAddrIPv4)
 		}
 	}
 	//todo set up IPv6 interface
@@ -164,7 +158,7 @@ func (r *VirtualRouter) SendAdvertMessage() {
 		logger.GLoger.Printf(logger.DEBUG, "send advert message of IP %v", net.IP(k[:]))
 	}
 	var x = r.AssembleVRRPPacket()
-	r.IPlayerInterface.WriteMessage(x.ToBytes())
+	r.IPlayerInterface.WriteMessage(x)
 }
 
 //AssembleVRRPPacket assemble VRRP advert packet
@@ -192,21 +186,12 @@ func (r *VirtualRouter) AssembleVRRPPacket() *VRRPPacket {
 //FetchVRRPPacket read VRRP packet from IP layer then push into Packet queue
 func (r *VirtualRouter) FetchVRRPPacket() {
 	for {
-		if octets, phdr, errofFetch := r.IPlayerInterface.ReadMessage(); errofFetch != nil {
+		if packet, errofFetch := r.IPlayerInterface.ReadMessage(); errofFetch != nil {
 			logger.GLoger.Printf(logger.ERROR, "error occurred when fetching advert packet, %v", errofFetch)
 		} else {
-			if packet, errofMakePacket := FromBytes(r.IPvX, octets); errofMakePacket != nil {
-				logger.GLoger.Printf(logger.ERROR, "error occurred when unmarshalling advert packet, %v", errofMakePacket)
-			} else {
-				if !packet.ValidateCheckSum(phdr) {
-					logger.GLoger.Printf(logger.ERROR, "received a illegal advert packet, pseudo header:{%v}", *phdr)
-				} else {
-					//maybe we need check if blocking here
-					packet.Pshdr = phdr
-					r.PacketQueue <- packet
-				}
-			}
+			r.PacketQueue <- packet
 		}
+		fmt.Printf("one packet caputred\n")
 	}
 }
 
@@ -272,12 +257,15 @@ func (r *VirtualRouter) EventLoop() {
 			r.IPAddrAnnouncer.AnnounceAll(r)
 			//set up advertisement timer
 			r.makeAdvertTicker()
+			r.masterUP()
+			logger.GLoger.Printf(logger.DEBUG, "enter MASTER state")
 			r.State = MASTER
 		} else {
 			logger.GLoger.Printf(logger.INFO, "VR is not a owner")
 			r.SetMasterAdvInterval(r.AdvertisementInterval)
 			//set up master down timer
 			r.makeMasterDownTimer()
+			logger.GLoger.Printf(logger.DEBUG, "enter BACKUP state")
 			r.State = BACKUP
 		}
 	case MASTER:
@@ -319,6 +307,7 @@ func (r *VirtualRouter) EventLoop() {
 					//set up master down timer
 					r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
 					r.makeMasterDownTimer()
+					r.masterDown()
 					r.State = BACKUP
 				} else {
 					//just discard this one
@@ -366,8 +355,10 @@ func (r *VirtualRouter) EventLoop() {
 			r.IPAddrAnnouncer.AnnounceAll(r)
 			//Set the Advertisement Timer to Advertisement interval
 			r.makeAdvertTicker()
+			r.masterUP()
 			r.State = MASTER
 		default:
+			//logger.GLoger.Printf(logger.DEBUG,"master down timer not fired")
 			//nothing to do
 		}
 
