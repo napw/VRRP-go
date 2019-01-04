@@ -43,5 +43,5 @@ var GLoger *Logger
 
 func init() {
 	GLoger = NewLogger(nil)
-	GLoger.SetLevel(DEBUG)
+	GLoger.SetLevel(INFO)
 }

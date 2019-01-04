@@ -3,6 +3,7 @@ package main
 import (
 	"VRRP/VRRP"
 	"net"
+	"time"
 )
 
 func main() {
@@ -30,15 +31,16 @@ func main() {
 
 	}*/
 	var vr = VRRP.NewVirtualRouter(200, "ens33", false, VRRP.IPv4)
-	vr.SetPriority(150)
+	vr.SetPriority(100)
 	vr.SetMasterAdvInterval(50)
-	vr.SetAdvInterval(50)
-	vr.SetPreemptMode(false)
+	vr.SetAdvInterval(200)
+	vr.SetPreemptMode(true)
 	vr.AddIPvXAddr(net.IPv4(1, 1, 1, 1))
 	vr.AddIPvXAddr(net.IPv4(172, 23, 27, 199))
-	vr.State = VRRP.MASTER
-	for i := 0; i < 3; i++ {
+	go vr.FetchVRRPPacket()
+	for {
 		vr.EventLoop()
+		time.Sleep(time.Microsecond * 200)
 	}
 
 }

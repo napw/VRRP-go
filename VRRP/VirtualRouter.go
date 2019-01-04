@@ -35,7 +35,7 @@ type VirtualRouter struct {
 
 func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRouter {
 	if IPvX != IPv4 && IPvX != IPv6 {
-		panic("IPvx must be IPv4 or IPv6")
+		panic("NewVirtualRouter: parameter IPvx must be IPv4 or IPv6")
 	}
 	var vr = &VirtualRouter{ProtectedIPaddrs: make(map[[16]byte]bool)}
 	vr.VRID = VRID
@@ -57,7 +57,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	//determine source IP addr of VRRP packet
 	var NetworkInterface, _ = net.InterfaceByName(nif)
 	if addrs, errofgetaddrs := NetworkInterface.Addrs(); errofgetaddrs != nil {
-		logger.GLoger.Printf(logger.FATAL, "error occurred when get ip addresses of %v", nif)
+		logger.GLoger.Printf(logger.FATAL, "NewVirtualRouter: error occurred when get ip addresses of %v", nif)
 		panic(errofgetaddrs)
 	} else {
 		vr.NetInterface = NetworkInterface
@@ -75,7 +75,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 			}
 		}
 		if preferred == nil {
-			panic("error occurred when getting preferred source IP, can not find usable IP address on " + nif)
+			panic("NewVirtualRouter: error occurred when getting preferred source IP, can not find usable IP address on " + nif)
 		}
 		vr.preferredSourceIP = preferred
 		//set up ARP client
@@ -125,7 +125,7 @@ func (r *VirtualRouter) AddIPvXAddr(ip net.IP) {
 	var key [16]byte
 	copy(key[:], ip)
 	if _, ok := r.ProtectedIPaddrs[key]; ok {
-		logger.GLoger.Printf(logger.ERROR, "add redundant IP addr %v", ip)
+		logger.GLoger.Printf(logger.ERROR, "VirtualRouter.AddIPvXAddr: add redundant IP addr %v", ip)
 	} else {
 		r.ProtectedIPaddrs[key] = true
 	}
@@ -138,7 +138,7 @@ func (r *VirtualRouter) RemoveIPvXAddr(ip net.IP) {
 		delete(r.ProtectedIPaddrs, key)
 		logger.GLoger.Printf(logger.INFO, "IP %v removed", ip)
 	} else {
-		logger.GLoger.Printf(logger.ERROR, "remove inexistent IP addr %v", ip)
+		logger.GLoger.Printf(logger.ERROR, "VirtualRouter.RemoveIPvXAddr: remove inexistent IP addr %v", ip)
 	}
 }
 
@@ -150,8 +150,11 @@ func (r *VirtualRouter) SendAdvertMessage() {
 	for k := range r.ProtectedIPaddrs {
 		logger.GLoger.Printf(logger.DEBUG, "send advert message of IP %v", net.IP(k[:]))
 	}
+	//todo move var x = r.AssembleVRRPPacket() to upper level
 	var x = r.AssembleVRRPPacket()
-	r.IPlayerInterface.WriteMessage(x)
+	if errOfWrite := r.IPlayerInterface.WriteMessage(x); errOfWrite != nil {
+		logger.GLoger.Printf(logger.ERROR, "VirtualRouter.WriteMessage: %v", errOfWrite)
+	}
 }
 
 //AssembleVRRPPacket assemble VRRP advert packet
@@ -247,13 +250,14 @@ func (r *VirtualRouter) EventLoop() {
 		return false
 	}
 	/////////////////////////////////////////
-	logger.GLoger.Printf(logger.DEBUG, "do event loop, VR state is %v", r.State)
 	switch r.State {
 	case INIT:
 		if r.Priority == 255 || r.Owner {
 			logger.GLoger.Printf(logger.INFO, "enter owner mode")
 			r.SendAdvertMessage()
-			r.IPAddrAnnouncer.AnnounceAll(r)
+			if errOfarp := r.IPAddrAnnouncer.AnnounceAll(r); errOfarp != nil {
+				logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfarp)
+			}
 			//set up advertisement timer
 			r.makeAdvertTicker()
 			r.masterUP()
@@ -350,7 +354,9 @@ func (r *VirtualRouter) EventLoop() {
 		case <-r.masterDownTimer.C:
 			// Send an ADVERTISEMENT
 			r.SendAdvertMessage()
-			r.IPAddrAnnouncer.AnnounceAll(r)
+			if errOfARP := r.IPAddrAnnouncer.AnnounceAll(r); errOfARP != nil {
+				logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfARP)
+			}
 			//Set the Advertisement Timer to Advertisement interval
 			r.makeAdvertTicker()
 			r.masterUP()
