@@ -155,13 +155,6 @@ func (packet *VRRPPacket) GetCheckSum() uint16 {
 	return uint16(packet.Header[6])<<8 | uint16(packet.Header[7])
 }
 
-/*
-func (packet *VRRPPacket)SetCheckSum(checksum uint16){
-	packet.Header[6]=byte(checksum>>8)
-	packet.Header[7]=byte(checksum)
-}
-*/
-
 func (packet *VRRPPacket) SetCheckSum(pshdr *PseudoHeader) {
 	var PointerAdd = func(ptr unsafe.Pointer, bytes int) unsafe.Pointer {
 		return unsafe.Pointer(uintptr(ptr) + uintptr(bytes))

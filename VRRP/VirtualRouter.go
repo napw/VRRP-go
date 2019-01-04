@@ -23,8 +23,6 @@ type VirtualRouter struct {
 	NetInterface        *net.Interface
 	IPvX                byte
 	preferredSourceIP   net.IP
-	VRRPAdvertTimer     *AdvertTimer
-	VRRPMasterDownTimer *MasterDownTimer
 	ProtectedIPaddrs    map[[16]byte]bool
 	State               int
 	IPlayerInterface    IPConnection
@@ -51,7 +49,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	//set Initi
 	vr.State = INIT
 
-	//set up event channel and packet queue
+	//init event channel and packet queue
 	vr.EventChannel = make(chan EVENT)
 	vr.PacketQueue = make(chan *VRRPPacket, PACKETQUEUESIZE)
 
@@ -110,11 +108,6 @@ func (r *VirtualRouter) SetMasterAdvInterval(Interval uint16) *VirtualRouter {
 	r.SkewTime = r.AdvertisementIntervalOfMaster - uint16(float32(r.AdvertisementIntervalOfMaster)*float32(r.Priority)/256)
 	r.MasterDownInterval = 3*r.AdvertisementIntervalOfMaster + r.SkewTime
 	//从MasterDownInterval和SkewTime的计算方式来看，同一组VirtualRouter中，Priority越高的Router越快地认为某个Master失效
-	return r
-}
-
-func (r *VirtualRouter) setMasterDownTimer() *VirtualRouter {
-	r.VRRPMasterDownTimer = NewMasterDownTimer(int(r.MasterDownInterval), r.MasterDown)
 	return r
 }
 
@@ -191,7 +184,7 @@ func (r *VirtualRouter) FetchVRRPPacket() {
 		} else {
 			r.PacketQueue <- packet
 		}
-		fmt.Printf("one packet caputred\n")
+		logger.GLoger.Printf(logger.DEBUG, "VirtualRouter.FetchVRRPPacket: received one advertisement")
 	}
 }
 
@@ -220,8 +213,13 @@ func (r *VirtualRouter) makeMasterDownTimer() {
 }
 
 func (r *VirtualRouter) stopMasterDownTimer() {
+	logger.GLoger.Printf(logger.DEBUG, "master down timer stopped")
 	if !r.masterDownTimer.Stop() {
-		<-r.masterDownTimer.C
+		select {
+		case <-r.masterDownTimer.C:
+		default:
+		}
+		logger.GLoger.Printf(logger.DEBUG, "master down timer expired before we stop it, drain the channel")
 	}
 }
 
@@ -249,6 +247,7 @@ func (r *VirtualRouter) EventLoop() {
 		return false
 	}
 	/////////////////////////////////////////
+	logger.GLoger.Printf(logger.DEBUG, "do event loop, VR state is %v", r.State)
 	switch r.State {
 	case INIT:
 		if r.Priority == 255 || r.Owner {
@@ -346,7 +345,6 @@ func (r *VirtualRouter) EventLoop() {
 		default:
 			//nothing to do
 		}
-
 		select {
 		//Master_Down_Timer fired
 		case <-r.masterDownTimer.C:
