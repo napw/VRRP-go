@@ -185,7 +185,12 @@ func (r *VirtualRouter) FetchVRRPPacket() {
 		if packet, errofFetch := r.IPlayerInterface.ReadMessage(); errofFetch != nil {
 			logger.GLoger.Printf(logger.ERROR, "error occurred when fetching advert packet, %v", errofFetch)
 		} else {
-			r.PacketQueue <- packet
+			if r.VRID == packet.GetVirtualRouterID() {
+				r.PacketQueue <- packet
+			} else {
+				logger.GLoger.Printf(logger.ERROR, "VirtualRouter.FetchVRRPPacket: received a advertisement with different ID")
+			}
+
 		}
 		logger.GLoger.Printf(logger.DEBUG, "VirtualRouter.FetchVRRPPacket: received one advertisement")
 	}
@@ -362,7 +367,6 @@ func (r *VirtualRouter) EventLoop() {
 			r.masterUP()
 			r.State = MASTER
 		default:
-			//logger.GLoger.Printf(logger.DEBUG,"master down timer not fired")
 			//nothing to do
 		}
 
