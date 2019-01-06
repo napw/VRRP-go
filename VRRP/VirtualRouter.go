@@ -41,7 +41,6 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	vr.VRID = VRID
 	vr.VirtualRouterMACAddressIPv4, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-01-%X", VRID))
 	vr.VirtualRouterMACAddressIPv6, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-02-%X", VRID))
-
 	vr.Owner = Owner
 	if Owner {
 		vr.Priority = 255
@@ -61,31 +60,21 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 		panic(errofgetaddrs)
 	} else {
 		vr.NetInterface = NetworkInterface
-		var preferred net.IP = nil
-		for _, addr := range addrs {
-			if addr, _, errofparsecidr := net.ParseCIDR(addr.String()); errofparsecidr != nil {
-				panic(errofparsecidr)
-			} else {
-				if addr.IsGlobalUnicast() {
-					if tmp := addr.To4(); tmp != nil {
-						preferred = tmp
-						break
-					}
-				}
-			}
+		//find preferred local IP address
+		if preferred, errOfGetPreferred := findIPbyInterface(NetworkInterface, IPvX); errOfGetPreferred != nil {
+			panic(fmt.Errorf("NewVirtualRouter: %v", errOfGetPreferred))
+		} else {
+			vr.preferredSourceIP = preferred
 		}
-		if preferred == nil {
-			panic("NewVirtualRouter: error occurred when getting preferred source IP, can not find usable IP address on " + nif)
-		}
-		vr.preferredSourceIP = preferred
-		//set up ARP client
-		vr.IPAddrAnnouncer = NewIPv4AddrAnnouncer(NetworkInterface)
-		//set up IPv4 interface
 		if IPvX == IPv4 {
+			//set up ARP client
+			vr.IPAddrAnnouncer = NewIPv4AddrAnnouncer(NetworkInterface)
+			//set up IPv4 interface
 			vr.IPlayerInterface = NewIPv4Conn(vr.preferredSourceIP, VRRPMultiAddrIPv4)
+		} else {
+			//todo set up IPv6 interface
 		}
 	}
-	//todo set up IPv6 interface
 	return vr
 
 }
