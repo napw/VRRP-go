@@ -1,6 +1,7 @@
 package logger
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -27,6 +28,9 @@ func (l *Logger) Printf(level LogLevel, format string, a ...interface{}) {
 		return
 	} else {
 		l.output.Printf(format, a...)
+		if level == FATAL {
+			panic(fmt.Sprintf(format, a...))
+		}
 	}
 
 }

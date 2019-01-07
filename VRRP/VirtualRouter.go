@@ -53,27 +53,24 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	vr.PacketQueue = make(chan *VRRPPacket, PACKETQUEUESIZE)
 
 	vr.IPvX = IPvX
-	//determine source IP addr of VRRP packet
-	var NetworkInterface, _ = net.InterfaceByName(nif)
-	if addrs, errofgetaddrs := NetworkInterface.Addrs(); errofgetaddrs != nil {
-		logger.GLoger.Printf(logger.FATAL, "NewVirtualRouter: error occurred when get ip addresses of %v", nif)
-		panic(errofgetaddrs)
+	var NetworkInterface, errOfGetIF = net.InterfaceByName(nif)
+	if errOfGetIF != nil {
+		panic(fmt.Errorf("NewVirtualRouter: %v", errOfGetIF))
+	}
+	vr.NetInterface = NetworkInterface
+	//find preferred local IP address
+	if preferred, errOfGetPreferred := findIPbyInterface(NetworkInterface, IPvX); errOfGetPreferred != nil {
+		panic(fmt.Errorf("NewVirtualRouter: %v", errOfGetPreferred))
 	} else {
-		vr.NetInterface = NetworkInterface
-		//find preferred local IP address
-		if preferred, errOfGetPreferred := findIPbyInterface(NetworkInterface, IPvX); errOfGetPreferred != nil {
-			panic(fmt.Errorf("NewVirtualRouter: %v", errOfGetPreferred))
-		} else {
-			vr.preferredSourceIP = preferred
-		}
-		if IPvX == IPv4 {
-			//set up ARP client
-			vr.IPAddrAnnouncer = NewIPv4AddrAnnouncer(NetworkInterface)
-			//set up IPv4 interface
-			vr.IPlayerInterface = NewIPv4Conn(vr.preferredSourceIP, VRRPMultiAddrIPv4)
-		} else {
-			//todo set up IPv6 interface
-		}
+		vr.preferredSourceIP = preferred
+	}
+	if IPvX == IPv4 {
+		//set up ARP client
+		vr.IPAddrAnnouncer = NewIPv4AddrAnnouncer(NetworkInterface)
+		//set up IPv4 interface
+		vr.IPlayerInterface = NewIPv4Conn(vr.preferredSourceIP, VRRPMultiAddrIPv4)
+	} else {
+		//todo set up IPv6 interface
 	}
 	return vr
 
@@ -172,7 +169,7 @@ func (r *VirtualRouter) AssembleVRRPPacket() *VRRPPacket {
 func (r *VirtualRouter) FetchVRRPPacket() {
 	for {
 		if packet, errofFetch := r.IPlayerInterface.ReadMessage(); errofFetch != nil {
-			logger.GLoger.Printf(logger.ERROR, "error occurred when fetching advert packet, %v", errofFetch)
+			logger.GLoger.Printf(logger.ERROR, "VirtualRouter.FetchVRRPPacket: %v", errofFetch)
 		} else {
 			if r.VRID == packet.GetVirtualRouterID() {
 				r.PacketQueue <- packet
@@ -230,20 +227,19 @@ func (r *VirtualRouter) resetMasterDownTimerToSkewTime() {
 	r.masterDownTimer.Reset(time.Duration(r.SkewTime*10) * time.Millisecond)
 }
 
-func (r *VirtualRouter) EventLoop() {
-	/////////////////////////////////////////
-	var LargerThan = func(ip1, ip2 net.IP) bool {
-		if len(ip1) != len(ip2) {
-			panic("error occurred when comparing two IP addresses for advert packet, they should have the same length")
+/////////////////////////////////////////
+var largerThan = func(ip1, ip2 net.IP) bool {
+	for index := range ip1 {
+		if ip1[index] > ip2[index] {
+			return true
 		}
-		for index := range ip1 {
-			if ip1[index] > ip2[index] {
-				return true
-			}
-		}
-		return false
 	}
-	/////////////////////////////////////////
+	return false
+}
+
+/////////////////////////////////////////
+
+func (r *VirtualRouter) EventLoop() {
 	switch r.State {
 	case INIT:
 		if r.Priority == 255 || r.Owner {
@@ -297,7 +293,7 @@ func (r *VirtualRouter) EventLoop() {
 			if packet.GetPriority() == 0 {
 				//I don't think we should anything here
 			} else {
-				if packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && LargerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
+				if packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
 					//todo give up master role
 					//cancel Advertisement timer
 					r.stopAdvertTicker()
@@ -332,7 +328,7 @@ func (r *VirtualRouter) EventLoop() {
 				//Set the Master_Down_Timer to Skew_Time
 				r.resetMasterDownTimerToSkewTime()
 			} else {
-				if r.Preempt == false || packet.GetPriority() > r.Priority {
+				if r.Preempt == false || packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
 					//reset master down timer
 					r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
 					r.resetMasterDownTimer()
