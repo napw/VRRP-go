@@ -10,13 +10,13 @@ const (
 	VRRPv3 VRRPVersion = 3
 )
 
-func (v *VRRPVersion) String() string {
-	switch *v {
-	case 1:
+func (v VRRPVersion) String() string {
+	switch v {
+	case VRRPv1:
 		return "VRRPVersion1"
-	case 2:
+	case VRRPv2:
 		return "VRRPVersion2"
-	case 3:
+	case VRRPv3:
 		return "VRRPVersion3"
 	default:
 		return "unknown VRRP version"
@@ -51,8 +51,8 @@ const (
 	START
 )
 
-func (e *EVENT) String() string {
-	switch *e {
+func (e EVENT) String() string {
+	switch e {
 	case START:
 		return "START"
 	case SHUTDOWN:

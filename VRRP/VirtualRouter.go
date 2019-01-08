@@ -45,6 +45,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	if Owner {
 		vr.Priority = 255
 	}
+	vr.Priority = 100
 	//set Initi
 	vr.State = INIT
 
@@ -241,6 +242,8 @@ func largerThan(ip1, ip2 net.IP) bool {
 	for index := range ip1 {
 		if ip1[index] > ip2[index] {
 			return true
+		} else if ip1[index] < ip2[index] {
+			return false
 		}
 	}
 	return false
@@ -333,7 +336,7 @@ func (r *VirtualRouter) EventLoop() {
 				r.stopMasterDownTimer()
 				//transition into INIT
 				r.State = INIT
-				logger.GLoger.Printf(logger.INFO, "event %v received", event)
+				logger.GLoger.Printf(logger.INFO, "event %s received", event)
 			}
 		default:
 		}
@@ -341,7 +344,7 @@ func (r *VirtualRouter) EventLoop() {
 		select {
 		case packet := <-r.PacketQueue:
 			if packet.GetPriority() == 0 {
-				logger.GLoger.Printf(logger.INFO, "virtual router[%v] received an advertisement with priority 0, transit into MASTER state", r.VRID)
+				logger.GLoger.Printf(logger.INFO, "received an advertisement with priority 0, transit into MASTER state", r.VRID)
 				//Set the Master_Down_Timer to Skew_Time
 				r.resetMasterDownTimerToSkewTime()
 			} else {
