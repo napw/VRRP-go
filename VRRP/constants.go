@@ -40,13 +40,26 @@ const (
 )
 
 var VRRPMultiAddrIPv4 = net.IPv4(224, 0, 0, 18)
+var VRRPMultiAddrIPv6 = net.ParseIP("FF02:0:0:0:0:0:0:12")
 
 var BaordcastHADDR, _ = net.ParseMAC("ff:ff:ff:ff:ff:ff")
 
 type EVENT byte
 
 const (
-	SHUTDOWN = iota
+	SHUTDOWN EVENT = iota
+	START
 )
+
+func (e *EVENT) String() string {
+	switch *e {
+	case START:
+		return "START"
+	case SHUTDOWN:
+		return "SHUTDOWN"
+	default:
+		return "unknown event"
+	}
+}
 
 const PACKETQUEUESIZE = 1000

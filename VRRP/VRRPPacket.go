@@ -98,7 +98,7 @@ func (packet *VRRPPacket) AddIPvXAddr(version byte, ip net.IP) {
 		}
 		packet.setIPvXAddrCount(packet.GetIPvXAddrCount() + 1)
 	default:
-		panic("impossible error occurred when add IP addr into VRRP packet")
+		panic("VRRPPacket.AddIPvXAddr: only support IPv4 and IPv6 address")
 	}
 }
 
