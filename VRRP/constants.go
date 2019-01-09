@@ -63,3 +63,4 @@ func (e EVENT) String() string {
 }
 
 const PACKETQUEUESIZE = 1000
+const EVENTCHANNELSIZE = 1

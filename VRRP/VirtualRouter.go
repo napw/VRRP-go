@@ -50,7 +50,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	vr.State = INIT
 
 	//init event channel and packet queue
-	vr.EventChannel = make(chan EVENT)
+	vr.EventChannel = make(chan EVENT, EVENTCHANNELSIZE)
 	vr.PacketQueue = make(chan *VRRPPacket, PACKETQUEUESIZE)
 
 	vr.IPvX = IPvX
@@ -72,10 +72,11 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 		vr.IPlayerInterface = NewIPv4Conn(vr.preferredSourceIP, VRRPMultiAddrIPv4)
 	} else {
 		//set up ND client
-		vr.IPAddrAnnouncer = NewIPIPv6AddrAnnouncer()
+		vr.IPAddrAnnouncer = NewIPIPv6AddrAnnouncer(NetworkInterface)
 		//set up IPv6 interface
 		vr.IPlayerInterface = NewIPv6Con(vr.preferredSourceIP, VRRPMultiAddrIPv6)
 	}
+	logger.GLoger.Printf(logger.INFO, "virtual router %v initialized, working on %v", VRID, nif)
 	return vr
 
 }
