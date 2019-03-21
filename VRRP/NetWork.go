@@ -43,6 +43,7 @@ func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 		if errOfParseMulticastGroup != nil {
 			logger.GLoger.Printf(logger.ERROR, "IPv6AddrAnnouncer.AnnounceAll: %v", errOfParseMulticastGroup)
 		} else {
+			//send unsolicited NeighborAdvertisement to refresh link layer address cache
 			var msg = &ndp.NeighborAdvertisement{
 				Override:      true,
 				TargetAddress: net.IP(key[:]),
