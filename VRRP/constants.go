@@ -64,3 +64,21 @@ func (e EVENT) String() string {
 
 const PACKETQUEUESIZE = 1000
 const EVENTCHANNELSIZE = 1
+
+type transition int
+
+func (t transition) String() string {
+	switch t {
+	case Master2Backup:
+		return "master to backup"
+	case Backup2Master:
+		return "backup to master"
+	default:
+		return "unknown transition"
+	}
+}
+
+const (
+	Master2Backup transition = iota
+	Backup2Master
+)

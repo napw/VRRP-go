@@ -31,6 +31,7 @@ type VirtualRouter struct {
 	PacketQueue         chan *VRRPPacket
 	advertisementTicker *time.Ticker
 	masterDownTimer     *time.Timer
+	transitionHandler   map[transition]func() error
 }
 
 func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRouter {
@@ -235,6 +236,38 @@ func (r *VirtualRouter) resetMasterDownTimerToSkewTime() {
 	r.masterDownTimer.Reset(time.Duration(r.SkewTime*10) * time.Millisecond)
 }
 
+func (r *VirtualRouter) Enroll(transition2 transition, handler func() error) bool {
+	if _, ok := r.transitionHandler[transition2]; ok {
+		logger.GLoger.Printf(logger.INFO, fmt.Sprintf("VirtualRouter.Enroll(): handler of transition [%s] overwrited", transition2))
+		r.transitionHandler[transition2] = handler
+		return true
+	}
+	logger.GLoger.Printf(logger.INFO, fmt.Sprintf("VirtualRouter.Enroll(): handler of transition [%s] enrolled", transition2))
+	r.transitionHandler[transition2] = handler
+	return false
+}
+
+func (r *VirtualRouter) transitionDoWork(t transition) error {
+	var work, ok = r.transitionHandler[t]
+	if ok == false {
+		return fmt.Errorf("VirtualRouter.transitionDoWork(): handler of [%s] does not exist", t)
+	}
+	var errOfwork error
+	switch t {
+	case Backup2Master:
+		errOfwork = work()
+	case Master2Backup:
+		errOfwork = work()
+	default:
+		return fmt.Errorf("VirtualRouter.transitionDoWork(): unknown transition")
+	}
+	if errOfwork != nil {
+		return fmt.Errorf("handler of transition [%s] failed, %s", t, errOfwork)
+	}
+	logger.GLoger.Printf(logger.INFO, fmt.Sprintf("handler of transition [%s] called", t))
+	return nil
+}
+
 /////////////////////////////////////////
 func largerThan(ip1, ip2 net.IP) bool {
 	if len(ip1) != len(ip2) {
@@ -250,8 +283,7 @@ func largerThan(ip1, ip2 net.IP) bool {
 	return false
 }
 
-/////////////////////////////////////////
-
+//EventLoop VRRP event loop to handle various triggered events
 func (r *VirtualRouter) EventLoop() {
 	switch r.State {
 	case INIT:
@@ -297,12 +329,7 @@ func (r *VirtualRouter) EventLoop() {
 				logger.GLoger.Printf(logger.INFO, "event %v received", event)
 				//maybe we can break out the event loop
 			}
-		default:
-			//nothing to do, just break
-		}
-		//check if advertisement timer fired
-		select {
-		case <-r.advertisementTicker.C:
+		case <-r.advertisementTicker.C: //check if advertisement timer fired
 			r.SendAdvertMessage()
 		default:
 			//nothing to do, just break
