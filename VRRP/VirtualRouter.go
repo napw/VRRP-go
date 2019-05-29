@@ -19,7 +19,7 @@ type VirtualRouter struct {
 	Owner                         bool
 	VirtualRouterMACAddressIPv4   net.HardwareAddr
 	VirtualRouterMACAddressIPv6   net.HardwareAddr
-	//VRRP specification delimiter
+	//
 	NetInterface        *net.Interface
 	IPvX                byte
 	preferredSourceIP   net.IP
@@ -285,123 +285,233 @@ func largerThan(ip1, ip2 net.IP) bool {
 
 //EventLoop VRRP event loop to handle various triggered events
 func (r *VirtualRouter) EventLoop() {
-	switch r.State {
-	case INIT:
-		select {
-		case event := <-r.EventChannel:
-			if event == START {
-				logger.GLoger.Printf(logger.INFO, "event %v received", event)
-				if r.Priority == 255 || r.Owner {
-					logger.GLoger.Printf(logger.INFO, "enter owner mode")
-					r.SendAdvertMessage()
-					if errOfarp := r.IPAddrAnnouncer.AnnounceAll(r); errOfarp != nil {
-						logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfarp)
+	for {
+		switch r.State {
+		case INIT:
+			select {
+			case event := <-r.EventChannel:
+				if event == START {
+					logger.GLoger.Printf(logger.INFO, "event %v received", event)
+					if r.Priority == 255 || r.Owner {
+						logger.GLoger.Printf(logger.INFO, "enter owner mode")
+						r.SendAdvertMessage()
+						if errOfarp := r.IPAddrAnnouncer.AnnounceAll(r); errOfarp != nil {
+							logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfarp)
+						}
+						//set up advertisement timer
+						r.makeAdvertTicker()
+						r.masterUP()
+						logger.GLoger.Printf(logger.DEBUG, "enter MASTER state")
+						r.State = MASTER
+					} else {
+						logger.GLoger.Printf(logger.INFO, "VR is not the owner of protected IP addresses")
+						r.SetMasterAdvInterval(r.AdvertisementInterval)
+						//set up master down timer
+						r.makeMasterDownTimer()
+						logger.GLoger.Printf(logger.DEBUG, "enter BACKUP state")
+						r.State = BACKUP
 					}
-					//set up advertisement timer
-					r.makeAdvertTicker()
-					r.masterUP()
-					logger.GLoger.Printf(logger.DEBUG, "enter MASTER state")
-					r.State = MASTER
-				} else {
-					logger.GLoger.Printf(logger.INFO, "VR is not the owner of protected IP addresses")
-					r.SetMasterAdvInterval(r.AdvertisementInterval)
-					//set up master down timer
-					r.makeMasterDownTimer()
-					logger.GLoger.Printf(logger.DEBUG, "enter BACKUP state")
-					r.State = BACKUP
 				}
 			}
-		}
-	case MASTER:
-		//check if shutdown event received
-		select {
-		case event := <-r.EventChannel:
-			if event == SHUTDOWN {
-				//close advert timer
-				r.stopAdvertTicker()
-				//send advertisement with priority 0
-				var priority = r.Priority
-				r.SetPriority(0)
-				r.SendAdvertMessage()
-				r.SetPriority(priority)
-				//transition into INIT
-				r.State = INIT
-				logger.GLoger.Printf(logger.INFO, "event %v received", event)
-				//maybe we can break out the event loop
-			}
-		case <-r.advertisementTicker.C: //check if advertisement timer fired
-			r.SendAdvertMessage()
-		default:
-			//nothing to do, just break
-		}
-		//process incoming advertisement
-		select {
-		case packet := <-r.PacketQueue:
-			if packet.GetPriority() == 0 {
-				//I don't think we should anything here
-			} else {
-				if packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
-					//todo give up master role
-					//cancel Advertisement timer
+		case MASTER:
+			//check if shutdown event received
+			select {
+			case event := <-r.EventChannel:
+				if event == SHUTDOWN {
+					//close advert timer
 					r.stopAdvertTicker()
-					//set up master down timer
-					r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
-					r.makeMasterDownTimer()
-					r.masterDown()
-					r.State = BACKUP
-				} else {
-					//just discard this one
+					//send advertisement with priority 0
+					var priority = r.Priority
+					r.SetPriority(0)
+					r.SendAdvertMessage()
+					r.SetPriority(priority)
+					//transition into INIT
+					r.State = INIT
+					logger.GLoger.Printf(logger.INFO, "event %v received", event)
+					//maybe we can break out the event loop
 				}
+			case <-r.advertisementTicker.C: //check if advertisement timer fired
+				r.SendAdvertMessage()
+			default:
+				//nothing to do, just break
 			}
-		default:
-			//nothing to do
-		}
-	case BACKUP:
-		select {
-		case event := <-r.EventChannel:
-			if event == SHUTDOWN {
-				//close master down timer
-				r.stopMasterDownTimer()
-				//transition into INIT
-				r.State = INIT
-				logger.GLoger.Printf(logger.INFO, "event %s received", event)
-			}
-		default:
-		}
-		//process incoming advertisement
-		select {
-		case packet := <-r.PacketQueue:
-			if packet.GetPriority() == 0 {
-				logger.GLoger.Printf(logger.INFO, "received an advertisement with priority 0, transit into MASTER state", r.VRID)
-				//Set the Master_Down_Timer to Skew_Time
-				r.resetMasterDownTimerToSkewTime()
-			} else {
-				if r.Preempt == false || packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
-					//reset master down timer
-					r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
-					r.resetMasterDownTimer()
+			//process incoming advertisement
+			select {
+			case packet := <-r.PacketQueue:
+				if packet.GetPriority() == 0 {
+					//I don't think we should anything here
 				} else {
-					//nothing to do, just discard this one
+					if packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
+						//todo give up master role
+						//cancel Advertisement timer
+						r.stopAdvertTicker()
+						//set up master down timer
+						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.makeMasterDownTimer()
+						r.masterDown()
+						r.State = BACKUP
+					} else {
+						//just discard this one
+					}
 				}
+			default:
+				//nothing to do
 			}
-		default:
-			//nothing to do
-		}
-		select {
-		//Master_Down_Timer fired
-		case <-r.masterDownTimer.C:
-			// Send an ADVERTISEMENT
-			r.SendAdvertMessage()
-			if errOfARP := r.IPAddrAnnouncer.AnnounceAll(r); errOfARP != nil {
-				logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfARP)
+		case BACKUP:
+			select {
+			case event := <-r.EventChannel:
+				if event == SHUTDOWN {
+					//close master down timer
+					r.stopMasterDownTimer()
+					//transition into INIT
+					r.State = INIT
+					logger.GLoger.Printf(logger.INFO, "event %s received", event)
+				}
+			default:
 			}
-			//Set the Advertisement Timer to Advertisement interval
-			r.makeAdvertTicker()
-			r.masterUP()
-			r.State = MASTER
-		default:
-			//nothing to do
-		}
+			//process incoming advertisement
+			select {
+			case packet := <-r.PacketQueue:
+				if packet.GetPriority() == 0 {
+					logger.GLoger.Printf(logger.INFO, "received an advertisement with priority 0, transit into MASTER state", r.VRID)
+					//Set the Master_Down_Timer to Skew_Time
+					r.resetMasterDownTimerToSkewTime()
+				} else {
+					if r.Preempt == false || packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
+						//reset master down timer
+						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.resetMasterDownTimer()
+					} else {
+						//nothing to do, just discard this one
+					}
+				}
+			default:
+				//nothing to do
+			}
+			select {
+			//Master_Down_Timer fired
+			case <-r.masterDownTimer.C:
+				// Send an ADVERTISEMENT
+				r.SendAdvertMessage()
+				if errOfARP := r.IPAddrAnnouncer.AnnounceAll(r); errOfARP != nil {
+					logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfARP)
+				}
+				//Set the Advertisement Timer to Advertisement interval
+				r.makeAdvertTicker()
+				r.masterUP()
+				r.State = MASTER
+			default:
+				//nothing to do
+			}
 
+		}
+	}
+}
+
+//EventLoop VRRP event loop to handle various triggered events
+func (r *VirtualRouter) EventSelector() {
+	for {
+		switch r.State {
+		case INIT:
+			select {
+			case event := <-r.EventChannel:
+				if event == START {
+					logger.GLoger.Printf(logger.INFO, "event %v received", event)
+					if r.Priority == 255 || r.Owner {
+						logger.GLoger.Printf(logger.INFO, "enter owner mode")
+						r.SendAdvertMessage()
+						if errOfarp := r.IPAddrAnnouncer.AnnounceAll(r); errOfarp != nil {
+							logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfarp)
+						}
+						//set up advertisement timer
+						r.makeAdvertTicker()
+						r.masterUP()
+						logger.GLoger.Printf(logger.DEBUG, "enter MASTER state")
+						r.State = MASTER
+					} else {
+						logger.GLoger.Printf(logger.INFO, "VR is not the owner of protected IP addresses")
+						r.SetMasterAdvInterval(r.AdvertisementInterval)
+						//set up master down timer
+						r.makeMasterDownTimer()
+						logger.GLoger.Printf(logger.DEBUG, "enter BACKUP state")
+						r.State = BACKUP
+					}
+				}
+			}
+		case MASTER:
+			//check if shutdown event received
+			select {
+			case event := <-r.EventChannel:
+				if event == SHUTDOWN {
+					//close advert timer
+					r.stopAdvertTicker()
+					//send advertisement with priority 0
+					var priority = r.Priority
+					r.SetPriority(0)
+					r.SendAdvertMessage()
+					r.SetPriority(priority)
+					//transition into INIT
+					r.State = INIT
+					logger.GLoger.Printf(logger.INFO, "event %v received", event)
+					//maybe we can break out the event loop
+				}
+			case <-r.advertisementTicker.C: //check if advertisement timer fired
+				r.SendAdvertMessage()
+			case packet := <-r.PacketQueue: //process incoming advertisement
+				if packet.GetPriority() == 0 {
+					//I don't think we should anything here
+				} else {
+					if packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
+						//todo give up master role
+						//cancel Advertisement timer
+						r.stopAdvertTicker()
+						//set up master down timer
+						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.makeMasterDownTimer()
+						r.masterDown()
+						r.State = BACKUP
+					} else {
+						//just discard this one
+					}
+				}
+			}
+
+		case BACKUP:
+			select {
+			case event := <-r.EventChannel:
+				if event == SHUTDOWN {
+					//close master down timer
+					r.stopMasterDownTimer()
+					//transition into INIT
+					r.State = INIT
+					logger.GLoger.Printf(logger.INFO, "event %s received", event)
+				}
+			case packet := <-r.PacketQueue: //process incoming advertisement
+				if packet.GetPriority() == 0 {
+					logger.GLoger.Printf(logger.INFO, "received an advertisement with priority 0, transit into MASTER state", r.VRID)
+					//Set the Master_Down_Timer to Skew_Time
+					r.resetMasterDownTimerToSkewTime()
+				} else {
+					if r.Preempt == false || packet.GetPriority() > r.Priority || (packet.GetPriority() == r.Priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
+						//reset master down timer
+						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.resetMasterDownTimer()
+					} else {
+						//nothing to do, just discard this one
+					}
+				}
+			case <-r.masterDownTimer.C: //Master_Down_Timer fired
+				// Send an ADVERTISEMENT
+				r.SendAdvertMessage()
+				if errOfARP := r.IPAddrAnnouncer.AnnounceAll(r); errOfARP != nil {
+					logger.GLoger.Printf(logger.ERROR, "VirtualRouter.EventLoop: %v", errOfARP)
+				}
+				//Set the Advertisement Timer to Advertisement interval
+				r.makeAdvertTicker()
+				r.masterUP()
+				r.State = MASTER
+			}
+
+		}
 	}
 }
