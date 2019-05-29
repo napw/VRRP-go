@@ -73,6 +73,14 @@ func (t transition) String() string {
 		return "master to backup"
 	case Backup2Master:
 		return "backup to master"
+	case Init2Master:
+		return "init to master"
+	case Init2Backup:
+		return "init to backup"
+	case Backup2Init:
+		return "backup to init"
+	case Master2Init:
+		return "master to init"
 	default:
 		return "unknown transition"
 	}
@@ -81,4 +89,8 @@ func (t transition) String() string {
 const (
 	Master2Backup transition = iota
 	Backup2Master
+	Init2Master
+	Init2Backup
+	Master2Init
+	Backup2Init
 )
