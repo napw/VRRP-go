@@ -10,13 +10,13 @@
     	"VRRP/VRRP"
     	"net"
     	"fmt"
+    	"time"
     )
     
     func main() {
-    		var vr = VRRP.NewVirtualRouter(200, "ens33", false, VRRP.IPv6)
-        	vr.SetPriority(100)
-        	vr.SetMasterAdvInterval(50)
-        	vr.SetAdvInterval(50)
+    	var vr = VRRP.NewVirtualRouter(240, "ens33", false, VRRP.IPv6)
+        	vr.SetPriorityAndMasterAdvInterval(243, time.Millisecond*700)
+        	vr.SetAdvInterval(time.Millisecond * 700)
         	vr.SetPreemptMode(true)
         	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96b"))
         	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96a"))
@@ -26,15 +26,16 @@
         	vr.Enroll(VRRP.Master2Init, func() {
         		fmt.Println("master to init")
         	})
+        	vr.Enroll(VRRP.Master2Backup, func() {
+        		fmt.Println("master to backup")
+        	})
         	go func() {
-        		time.Sleep(time.Second * 30)
+        		time.Sleep(time.Second * 120)
         		vr.Stop()
         	}()
-        	vr.StartWithEventLoop()
+        	vr.StartWithEventSelector()
     }
 ```
 
 ## To-DO
-1. add callback for state switching 为状态切换添加回调
-2. reduce CPU usage 降低CPU使用率
-3. more comprehensive example 更详细的示例代码
+
