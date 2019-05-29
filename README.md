@@ -9,23 +9,28 @@
     import (
     	"VRRP/VRRP"
     	"net"
+    	"fmt"
     )
     
     func main() {
-    	var vr = VRRP.NewVirtualRouter(200, "ens33", false, VRRP.IPv6)
-    	vr.SetPriority(100)
-    	vr.SetMasterAdvInterval(50)
-    	vr.SetAdvInterval(50)
-    	vr.SetPreemptMode(true)
-    	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96b"))
-    	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96a"))
-    	go vr.FetchVRRPPacket()
-    	go func() {
-    		vr.EventChannel<-VRRP.START
-    	}()
-    	for {
-    		vr.EventLoop()
-    	} 
+    		var vr = VRRP.NewVirtualRouter(200, "ens33", false, VRRP.IPv6)
+        	vr.SetPriority(100)
+        	vr.SetMasterAdvInterval(50)
+        	vr.SetAdvInterval(50)
+        	vr.SetPreemptMode(true)
+        	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96b"))
+        	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96a"))
+        	vr.Enroll(VRRP.Backup2Master, func() {
+        		fmt.Println("init to master")
+        	})
+        	vr.Enroll(VRRP.Master2Init, func() {
+        		fmt.Println("master to init")
+        	})
+        	go func() {
+        		time.Sleep(time.Second * 30)
+        		vr.Stop()
+        	}()
+        	vr.StartWithEventLoop()
     }
 ```
 

@@ -38,7 +38,7 @@ func NewIPIPv6AddrAnnouncer(nif *net.Interface) *IPv6AddrAnnouncer {
 }
 
 func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
-	for key := range vr.ProtectedIPaddrs {
+	for key := range vr.protectedIPaddrs {
 		var multicastgroup, errOfParseMulticastGroup = ndp.SolicitedNodeMulticast(net.IP(key[:]))
 		if errOfParseMulticastGroup != nil {
 			logger.GLoger.Printf(logger.ERROR, "IPv6AddrAnnouncer.AnnounceAll: %v", errOfParseMulticastGroup)
@@ -50,7 +50,7 @@ func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 				Options: []ndp.Option{
 					&ndp.LinkLayerAddress{
 						Direction: ndp.Source,
-						Addr:      vr.NetInterface.HardwareAddr,
+						Addr:      vr.netInterface.HardwareAddr,
 					},
 				},
 			}
@@ -84,8 +84,8 @@ func (ar *IPv4AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 		return fmt.Errorf("IPv4AddrAnnouncer.AnnounceAll: %v", errofSetDealLine)
 	}
 	var packet = ar.makeGratuitousPacket()
-	for k := range vr.ProtectedIPaddrs {
-		packet.SenderHardwareAddr = vr.NetInterface.HardwareAddr
+	for k := range vr.protectedIPaddrs {
+		packet.SenderHardwareAddr = vr.netInterface.HardwareAddr
 		packet.SenderIP = net.IP(k[:]).To4()
 		packet.TargetHardwareAddr = BaordcastHADDR
 		packet.TargetIP = net.IP(k[:]).To4()
