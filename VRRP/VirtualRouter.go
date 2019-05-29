@@ -83,7 +83,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 
 }
 
-func (r *VirtualRouter) SetPriority(Priority byte) *VirtualRouter {
+func (r *VirtualRouter) setPriority(Priority byte) *VirtualRouter {
 	if r.owner {
 		return r
 	}
@@ -91,12 +91,24 @@ func (r *VirtualRouter) SetPriority(Priority byte) *VirtualRouter {
 	return r
 }
 
-func (r *VirtualRouter) SetAdvInterval(Interval uint16) *VirtualRouter {
-	r.advertisementInterval = Interval
+func (r *VirtualRouter) SetAdvInterval(Interval time.Duration) *VirtualRouter {
+	if Interval < 10*time.Millisecond {
+		panic("interval can not less than 10 ms")
+	}
+	r.advertisementInterval = uint16(Interval / (10 * time.Millisecond))
 	return r
 }
 
-func (r *VirtualRouter) SetMasterAdvInterval(Interval uint16) *VirtualRouter {
+func (r *VirtualRouter) SetPriorityAndMasterAdvInterval(priority byte, interval time.Duration) *VirtualRouter {
+	r.setPriority(priority)
+	if interval < 10*time.Millisecond {
+		panic("interval can not less than 10 ms")
+	}
+	r.setMasterAdvInterval(uint16(interval / (10 * time.Millisecond)))
+	return r
+}
+
+func (r *VirtualRouter) setMasterAdvInterval(Interval uint16) *VirtualRouter {
 	r.advertisementIntervalOfMaster = Interval
 	r.skewTime = r.advertisementIntervalOfMaster - uint16(float32(r.advertisementIntervalOfMaster)*float32(r.priority)/256)
 	r.masterDownInterval = 3*r.advertisementIntervalOfMaster + r.skewTime
@@ -180,7 +192,7 @@ func (r *VirtualRouter) fetchVRRPPacket() {
 			if r.vrID == packet.GetVirtualRouterID() {
 				r.packetQueue <- packet
 			} else {
-				logger.GLoger.Printf(logger.ERROR, "VirtualRouter.fetchVRRPPacket: received a advertisement with different ID")
+				logger.GLoger.Printf(logger.ERROR, "VirtualRouter.fetchVRRPPacket: received a advertisement with different ID: %v", packet.GetVirtualRouterID())
 			}
 
 		}
@@ -284,7 +296,7 @@ func (r *VirtualRouter) eventLoop() {
 						r.transitionDoWork(Init2Master)
 					} else {
 						logger.GLoger.Printf(logger.INFO, "VR is not the owner of protected IP addresses")
-						r.SetMasterAdvInterval(r.advertisementInterval)
+						r.setMasterAdvInterval(r.advertisementInterval)
 						//set up master down timer
 						r.makeMasterDownTimer()
 						logger.GLoger.Printf(logger.DEBUG, "enter BACKUP state")
@@ -302,9 +314,9 @@ func (r *VirtualRouter) eventLoop() {
 					r.stopAdvertTicker()
 					//send advertisement with priority 0
 					var priority = r.priority
-					r.SetPriority(0)
+					r.setPriority(0)
 					r.sendAdvertMessage()
-					r.SetPriority(priority)
+					r.setPriority(priority)
 					//transition into INIT
 					r.state = INIT
 					r.transitionDoWork(Master2Init)
@@ -327,7 +339,7 @@ func (r *VirtualRouter) eventLoop() {
 						//cancel Advertisement timer
 						r.stopAdvertTicker()
 						//set up master down timer
-						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.setMasterAdvInterval(packet.GetAdvertisementInterval())
 						r.makeMasterDownTimer()
 						r.state = BACKUP
 						r.transitionDoWork(Master2Backup)
@@ -361,7 +373,7 @@ func (r *VirtualRouter) eventLoop() {
 				} else {
 					if r.preempt == false || packet.GetPriority() > r.priority || (packet.GetPriority() == r.priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
 						//reset master down timer
-						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.setMasterAdvInterval(packet.GetAdvertisementInterval())
 						r.resetMasterDownTimer()
 					} else {
 						//nothing to do, just discard this one
@@ -414,7 +426,7 @@ func (r *VirtualRouter) eventSelector() {
 						r.transitionDoWork(Init2Master)
 					} else {
 						logger.GLoger.Printf(logger.INFO, "VR is not the owner of protected IP addresses")
-						r.SetMasterAdvInterval(r.advertisementInterval)
+						r.setMasterAdvInterval(r.advertisementInterval)
 						//set up master down timer
 						r.makeMasterDownTimer()
 						logger.GLoger.Printf(logger.DEBUG, "enter BACKUP state")
@@ -432,9 +444,9 @@ func (r *VirtualRouter) eventSelector() {
 					r.stopAdvertTicker()
 					//send advertisement with priority 0
 					var priority = r.priority
-					r.SetPriority(0)
+					r.setPriority(0)
 					r.sendAdvertMessage()
-					r.SetPriority(priority)
+					r.setPriority(priority)
 					//transition into INIT
 					r.state = INIT
 					r.transitionDoWork(Master2Init)
@@ -452,7 +464,7 @@ func (r *VirtualRouter) eventSelector() {
 						//cancel Advertisement timer
 						r.stopAdvertTicker()
 						//set up master down timer
-						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.setMasterAdvInterval(packet.GetAdvertisementInterval())
 						r.makeMasterDownTimer()
 						r.state = BACKUP
 						r.transitionDoWork(Master2Backup)
@@ -481,7 +493,7 @@ func (r *VirtualRouter) eventSelector() {
 				} else {
 					if r.preempt == false || packet.GetPriority() > r.priority || (packet.GetPriority() == r.priority && largerThan(packet.Pshdr.Saddr, r.preferredSourceIP)) {
 						//reset master down timer
-						r.SetMasterAdvInterval(packet.GetAdvertisementInterval())
+						r.setMasterAdvInterval(packet.GetAdvertisementInterval())
 						r.resetMasterDownTimer()
 					} else {
 						//nothing to do, just discard this one
