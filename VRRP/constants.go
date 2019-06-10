@@ -1,6 +1,9 @@
 package VRRP
 
-import "net"
+import (
+	"net"
+	"time"
+)
 
 type VRRPVersion byte
 
@@ -93,4 +96,10 @@ const (
 	Init2Backup
 	Master2Init
 	Backup2Init
+)
+
+var (
+	defaultPreempt                    = true
+	defaultPriority              byte = 100
+	defaultAdvertisementInterval      = 1 * time.Second
 )

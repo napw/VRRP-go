@@ -8,12 +8,9 @@ import (
 )
 
 func main() {
-	var vr = VRRP.NewVirtualRouter(240, "ens33", false, VRRP.IPv6)
-	vr.SetPriorityAndMasterAdvInterval(243, time.Millisecond*700)
-	vr.SetAdvInterval(time.Millisecond * 700)
-	vr.SetPreemptMode(true)
-	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96b"))
-	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96a"))
+	var vr = VRRP.NewVirtualRouter(240, "ens33", false, VRRP.IPv4)
+	vr.AddIPvXAddr(net.ParseIP("192.168.83.24"))
+	vr.AddIPvXAddr(net.ParseIP("192.168.83.24"))
 	vr.Enroll(VRRP.Backup2Master, func() {
 		fmt.Println("init to master")
 	})

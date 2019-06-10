@@ -42,12 +42,14 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	vr.virtualRouterMACAddressIPv4, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-01-%X", VRID))
 	vr.virtualRouterMACAddressIPv6, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-02-%X", VRID))
 	vr.owner = Owner
+	//default values that defined by RFC 5798
 	if Owner {
 		vr.priority = 255
 	}
-	vr.priority = 100
-	//set Initi
 	vr.state = INIT
+	vr.preempt = defaultPreempt
+	vr.SetAdvInterval(defaultAdvertisementInterval)
+	vr.SetPriorityAndMasterAdvInterval(defaultPriority, defaultAdvertisementInterval)
 
 	//make
 	vr.protectedIPaddrs = make(map[[16]byte]bool)
