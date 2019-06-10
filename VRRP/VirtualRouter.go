@@ -15,7 +15,6 @@ type VirtualRouter struct {
 	skewTime                      uint16
 	masterDownInterval            uint16
 	preempt                       bool
-	acceptMode                    bool
 	owner                         bool
 	virtualRouterMACAddressIPv4   net.HardwareAddr
 	virtualRouterMACAddressIPv6   net.HardwareAddr
@@ -38,7 +37,7 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	if IPvX != IPv4 && IPvX != IPv6 {
 		logger.GLoger.Printf(logger.FATAL, "NewVirtualRouter: parameter IPvx must be IPv4 or IPv6")
 	}
-	var vr = &VirtualRouter{protectedIPaddrs: make(map[[16]byte]bool)}
+	var vr = &VirtualRouter{}
 	vr.vrID = VRID
 	vr.virtualRouterMACAddressIPv4, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-01-%X", VRID))
 	vr.virtualRouterMACAddressIPv6, _ = net.ParseMAC(fmt.Sprintf("00-00-5E-00-02-%X", VRID))
@@ -50,7 +49,8 @@ func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRout
 	//set Initi
 	vr.state = INIT
 
-	//init event channel and packet queue
+	//make
+	vr.protectedIPaddrs = make(map[[16]byte]bool)
 	vr.eventChannel = make(chan EVENT, EVENTCHANNELSIZE)
 	vr.packetQueue = make(chan *VRRPPacket, PACKETQUEUESIZE)
 	vr.transitionHandler = make(map[transition]func())
@@ -121,11 +121,6 @@ func (r *VirtualRouter) SetPreemptMode(flag bool) *VirtualRouter {
 	return r
 }
 
-func (r *VirtualRouter) SetAcceptMode(flag bool) *VirtualRouter {
-	r.acceptMode = flag
-	return r
-}
-
 func (r *VirtualRouter) AddIPvXAddr(ip net.IP) {
 	var key [16]byte
 	copy(key[:], ip)
@@ -151,7 +146,6 @@ func (r *VirtualRouter) sendAdvertMessage() {
 	for k := range r.protectedIPaddrs {
 		logger.GLoger.Printf(logger.DEBUG, "send advert message of IP %v", net.IP(k[:]))
 	}
-	//todo move var x = r.assembleVRRPPacket() to upper level
 	var x = r.assembleVRRPPacket()
 	if errOfWrite := r.iplayerInterface.WriteMessage(x); errOfWrite != nil {
 		logger.GLoger.Printf(logger.ERROR, "VirtualRouter.WriteMessage: %v", errOfWrite)

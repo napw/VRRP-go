@@ -31,7 +31,7 @@ type IPv6AddrAnnouncer struct {
 func NewIPIPv6AddrAnnouncer(nif *net.Interface) *IPv6AddrAnnouncer {
 	var con, ip, errOfMakeNDPCon = ndp.Dial(nif, ndp.LinkLocal)
 	if errOfMakeNDPCon != nil {
-		logger.GLoger.Printf(logger.FATAL, "NewIPIPv6AddrAnnouncer: %v", errOfMakeNDPCon)
+		logger.GLoger.Printf(logger.FATAL, "NewIPv6AddrAnnouncer: %v", errOfMakeNDPCon)
 	}
 	logger.GLoger.Printf(logger.INFO, "NDP client initialized, working on %v, source IP %v", nif.Name, ip)
 	return &IPv6AddrAnnouncer{con: con}
@@ -42,6 +42,7 @@ func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 		var multicastgroup, errOfParseMulticastGroup = ndp.SolicitedNodeMulticast(net.IP(key[:]))
 		if errOfParseMulticastGroup != nil {
 			logger.GLoger.Printf(logger.ERROR, "IPv6AddrAnnouncer.AnnounceAll: %v", errOfParseMulticastGroup)
+			return errOfParseMulticastGroup
 		} else {
 			//send unsolicited NeighborAdvertisement to refresh link layer address cache
 			var msg = &ndp.NeighborAdvertisement{
@@ -56,6 +57,7 @@ func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 			}
 			if errOfWrite := nd.con.WriteTo(msg, nil, multicastgroup); errOfWrite != nil {
 				logger.GLoger.Printf(logger.ERROR, "IPv6AddrAnnouncer.AnnounceAll: %v", errOfWrite)
+				return errOfWrite
 			} else {
 				logger.GLoger.Printf(logger.INFO, "send unsolicited neighbor advertisement for %v", net.IP(key[:]))
 			}
@@ -79,7 +81,6 @@ func (ar *IPv4AddrAnnouncer) makeGratuitousPacket() *arp.Packet {
 
 //AnnounceAll send gratuitous ARP response for all protected IPv4 addresses
 func (ar *IPv4AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
-	//todo add time limit
 	if errofSetDealLine := ar.ARPClient.SetWriteDeadline(time.Now().Add(500 * time.Microsecond)); errofSetDealLine != nil {
 		return fmt.Errorf("IPv4AddrAnnouncer.AnnounceAll: %v", errofSetDealLine)
 	}
@@ -127,7 +128,7 @@ func ipConnection(local, remote net.IP) (*net.IPConn, error) {
 
 	var conn *net.IPConn
 	var errOfListenIP error
-	//a little redundant
+	//redundant
 	//todo simplify here
 	if local.IsLinkLocalUnicast() {
 		var itf, errOfFind = findInterfacebyIP(local)
