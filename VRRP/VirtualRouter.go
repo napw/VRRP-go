@@ -33,6 +33,7 @@ type VirtualRouter struct {
 	transitionHandler   map[transition]func()
 }
 
+//NewVirtualRouter create a new virtual router with designated parameters
 func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRouter {
 	if IPvX != IPv4 && IPvX != IPv6 {
 		logger.GLoger.Printf(logger.FATAL, "NewVirtualRouter: parameter IPvx must be IPv4 or IPv6")

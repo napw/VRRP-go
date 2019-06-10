@@ -2,15 +2,25 @@ package main
 
 import (
 	"VRRP/VRRP"
+	"flag"
 	"fmt"
-	"net"
 	"time"
 )
 
+var (
+	VRID     int
+	Priority int
+)
+
+func init() {
+	flag.IntVar(&VRID, "vrid", 233, "virtual router ID")
+	flag.IntVar(&Priority, "pri", 100, "router priority")
+}
+
 func main() {
-	var vr = VRRP.NewVirtualRouter(240, "ens33", false, VRRP.IPv4)
-	vr.AddIPvXAddr(net.ParseIP("192.168.83.24"))
-	vr.AddIPvXAddr(net.ParseIP("192.168.83.24"))
+	flag.Parse()
+	var vr = VRRP.NewVirtualRouter(byte(VRID), "ens33", false, VRRP.IPv4)
+	vr.SetPriorityAndMasterAdvInterval(byte(Priority), time.Millisecond*800)
 	vr.Enroll(VRRP.Backup2Master, func() {
 		fmt.Println("init to master")
 	})
@@ -21,7 +31,7 @@ func main() {
 		fmt.Println("master to backup")
 	})
 	go func() {
-		time.Sleep(time.Second * 120)
+		time.Sleep(time.Minute * 5)
 		vr.Stop()
 	}()
 	vr.StartWithEventSelector()

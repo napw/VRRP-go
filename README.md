@@ -4,38 +4,54 @@
 
 ## example
 ```go
-    package main
-    
-    import (
-    	"VRRP/VRRP"
-    	"net"
-    	"fmt"
-    	"time"
-    )
-    
-    func main() {
-    	var vr = VRRP.NewVirtualRouter(240, "ens33", false, VRRP.IPv6)
-        	vr.SetPriorityAndMasterAdvInterval(243, time.Millisecond*700)
-        	vr.SetAdvInterval(time.Millisecond * 700)
-        	vr.SetPreemptMode(true)
-        	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96b"))
-        	vr.AddIPvXAddr(net.ParseIP("fe80::e7ec:1b6e:8e59:c96a"))
-        	vr.Enroll(VRRP.Backup2Master, func() {
-        		fmt.Println("init to master")
-        	})
-        	vr.Enroll(VRRP.Master2Init, func() {
-        		fmt.Println("master to init")
-        	})
-        	vr.Enroll(VRRP.Master2Backup, func() {
-        		fmt.Println("master to backup")
-        	})
-        	go func() {
-        		time.Sleep(time.Second * 120)
-        		vr.Stop()
-        	}()
-        	vr.StartWithEventSelector()
-    }
+package main
+
+import (
+	"VRRP/VRRP"
+	"flag"
+	"fmt"
+	"time"
+)
+
+var (
+	VRID int
+	Priority int
+)
+
+func init(){
+	flag.IntVar(&VRID,"vrid",233,"virtual router ID")
+	flag.IntVar(&Priority,"pri",100,"router priority")
+}
+
+func main() {
+	flag.Parse()
+	var vr = VRRP.NewVirtualRouter(byte(VRID), "ens33", false, VRRP.IPv4)
+	vr.SetPriorityAndMasterAdvInterval(byte(Priority),time.Millisecond*800)
+	vr.Enroll(VRRP.Backup2Master, func() {
+		fmt.Println("init to master")
+	})
+	vr.Enroll(VRRP.Master2Init, func() {
+		fmt.Println("master to init")
+	})
+	vr.Enroll(VRRP.Master2Backup, func() {
+		fmt.Println("master to backup")
+	})
+	go func() {
+		time.Sleep(time.Minute * 5)
+		vr.Stop()
+	}()
+	vr.StartWithEventSelector()
+
+}
+```
+```shell
+GOOS=linux go build -o vr test.go
+#execute on host1
+./vr -vrid=200 -pri=150
+#execute on host2
+./vr -vrid=200 -pri=230
 ```
 
 ## To-DO
+
 
