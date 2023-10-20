@@ -1,11 +1,13 @@
-package VRRP
+package vrrp
 
 import (
-	"VRRP/logger"
 	"fmt"
+	"net"
+	"net/netip"
+	"vrrp-go/logger"
+
 	"github.com/mdlayher/arp"
 	"github.com/mdlayher/ndp"
-	"net"
 
 	"syscall"
 	"time"
@@ -29,7 +31,7 @@ type IPv6AddrAnnouncer struct {
 }
 
 func NewIPIPv6AddrAnnouncer(nif *net.Interface) *IPv6AddrAnnouncer {
-	var con, ip, errOfMakeNDPCon = ndp.Dial(nif, ndp.LinkLocal)
+	var con, ip, errOfMakeNDPCon = ndp.Listen(nif, ndp.LinkLocal)
 	if errOfMakeNDPCon != nil {
 		logger.GLoger.Printf(logger.FATAL, "NewIPv6AddrAnnouncer: %v", errOfMakeNDPCon)
 	}
@@ -39,7 +41,8 @@ func NewIPIPv6AddrAnnouncer(nif *net.Interface) *IPv6AddrAnnouncer {
 
 func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 	for key := range vr.protectedIPaddrs {
-		var multicastgroup, errOfParseMulticastGroup = ndp.SolicitedNodeMulticast(net.IP(key[:]))
+		address := netip.AddrFrom16(key)
+		var multicastgroup, errOfParseMulticastGroup = ndp.SolicitedNodeMulticast(address)
 		if errOfParseMulticastGroup != nil {
 			logger.GLoger.Printf(logger.ERROR, "IPv6AddrAnnouncer.AnnounceAll: %v", errOfParseMulticastGroup)
 			return errOfParseMulticastGroup
@@ -47,7 +50,7 @@ func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 			//send unsolicited NeighborAdvertisement to refresh link layer address cache
 			var msg = &ndp.NeighborAdvertisement{
 				Override:      true,
-				TargetAddress: net.IP(key[:]),
+				TargetAddress: address,
 				Options: []ndp.Option{
 					&ndp.LinkLayerAddress{
 						Direction: ndp.Source,
@@ -68,7 +71,7 @@ func (nd *IPv6AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 	return nil
 }
 
-//makeGratuitousPacket make gratuitous ARP packet with out payload
+// makeGratuitousPacket make gratuitous ARP packet with out payload
 func (ar *IPv4AddrAnnouncer) makeGratuitousPacket() *arp.Packet {
 	var packet arp.Packet
 	packet.HardwareType = 1      //ethernet10m
@@ -79,17 +82,18 @@ func (ar *IPv4AddrAnnouncer) makeGratuitousPacket() *arp.Packet {
 	return &packet
 }
 
-//AnnounceAll send gratuitous ARP response for all protected IPv4 addresses
+// AnnounceAll send gratuitous ARP response for all protected IPv4 addresses
 func (ar *IPv4AddrAnnouncer) AnnounceAll(vr *VirtualRouter) error {
 	if errofSetDealLine := ar.ARPClient.SetWriteDeadline(time.Now().Add(500 * time.Microsecond)); errofSetDealLine != nil {
 		return fmt.Errorf("IPv4AddrAnnouncer.AnnounceAll: %v", errofSetDealLine)
 	}
 	var packet = ar.makeGratuitousPacket()
 	for k := range vr.protectedIPaddrs {
+		address := netip.AddrFrom4(netip.AddrFrom16(k).As4())
 		packet.SenderHardwareAddr = vr.netInterface.HardwareAddr
-		packet.SenderIP = net.IP(k[:]).To4()
+		packet.SenderIP = address
 		packet.TargetHardwareAddr = BaordcastHADDR
-		packet.TargetIP = net.IP(k[:]).To4()
+		packet.TargetIP = address
 		logger.GLoger.Printf(logger.INFO, "send gratuitous arp for %v", net.IP(k[:]))
 		if errofsendarp := ar.ARPClient.WriteTo(packet, BaordcastHADDR); errofsendarp != nil {
 			return fmt.Errorf("IPv4AddrAnnouncer.AnnounceAll: %v", errofsendarp)

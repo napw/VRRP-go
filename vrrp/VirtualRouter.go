@@ -1,10 +1,10 @@
-package VRRP
+package vrrp
 
 import (
-	"VRRP/logger"
 	"fmt"
 	"net"
 	"time"
+	"vrrp-go/logger"
 )
 
 type VirtualRouter struct {
@@ -33,7 +33,7 @@ type VirtualRouter struct {
 	transitionHandler   map[transition]func()
 }
 
-//NewVirtualRouter create a new virtual router with designated parameters
+// NewVirtualRouter create a new virtual router with designated parameters
 func NewVirtualRouter(VRID byte, nif string, Owner bool, IPvX byte) *VirtualRouter {
 	if IPvX != IPv4 && IPvX != IPv6 {
 		logger.GLoger.Printf(logger.FATAL, "NewVirtualRouter: parameter IPvx must be IPv4 or IPv6")
@@ -155,7 +155,7 @@ func (r *VirtualRouter) sendAdvertMessage() {
 	}
 }
 
-//assembleVRRPPacket assemble VRRP advert packet
+// assembleVRRPPacket assemble VRRP advert packet
 func (r *VirtualRouter) assembleVRRPPacket() *VRRPPacket {
 
 	var packet VRRPPacket
@@ -180,7 +180,7 @@ func (r *VirtualRouter) assembleVRRPPacket() *VRRPPacket {
 	return &packet
 }
 
-//fetchVRRPPacket read VRRP packet from IP layer then push into Packet queue
+// fetchVRRPPacket read VRRP packet from IP layer then push into Packet queue
 func (r *VirtualRouter) fetchVRRPPacket() {
 	for {
 		if packet, errofFetch := r.iplayerInterface.ReadMessage(); errofFetch != nil {
@@ -256,7 +256,7 @@ func (r *VirtualRouter) transitionDoWork(t transition) {
 	return
 }
 
-/////////////////////////////////////////
+// ///////////////////////////////////////
 func largerThan(ip1, ip2 net.IP) bool {
 	if len(ip1) != len(ip2) {
 		logger.GLoger.Printf(logger.FATAL, "largerThan: two compared IP addresses must have the same length")
@@ -271,7 +271,7 @@ func largerThan(ip1, ip2 net.IP) bool {
 	return false
 }
 
-//eventLoop VRRP event loop to handle various triggered events
+// eventLoop VRRP event loop to handle various triggered events
 func (r *VirtualRouter) eventLoop() {
 	for {
 		switch r.state {
@@ -400,7 +400,7 @@ func (r *VirtualRouter) eventLoop() {
 	}
 }
 
-//eventSelector VRRP event selector to handle various triggered events
+// eventSelector VRRP event selector to handle various triggered events
 func (r *VirtualRouter) eventSelector() {
 	for {
 		switch r.state {
