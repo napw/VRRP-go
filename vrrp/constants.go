@@ -1,4 +1,4 @@
-package VRRP
+package vrrp
 
 import (
 	"net"
